@@ -28,8 +28,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 namespace Storage {
 namespace {
 
-// max 1mb uploaded at the same time in each session
-constexpr auto kMaxUploadPerSession = 1024 * 1024;
+// SpecGram: Speed booster - max 4mb uploaded at the same time in each session
+constexpr auto kMaxUploadPerSession = 4 * 1024 * 1024;
 
 constexpr auto kDocumentMaxPartsCountDefault = 4000;
 
@@ -48,8 +48,8 @@ constexpr auto kDocumentUploadPartSize3 = 256 * 1024;
 // 512kb for large document ( <= 1500mb )
 constexpr auto kDocumentUploadPartSize4 = 512 * 1024;
 
-// One part each 200ms, if not uploaded faster.
-constexpr auto kUploadRequestInterval = crl::time(200);
+// One part each 50ms, if not uploaded faster.
+constexpr auto kUploadRequestInterval = crl::time(50);
 
 // How much time without upload causes additional session kill.
 constexpr auto kKillSessionTimeout = 15 * crl::time(1000);
@@ -57,7 +57,7 @@ constexpr auto kKillSessionTimeout = 15 * crl::time(1000);
 // How much wait after session kill before killing another one.
 constexpr auto kWaitForNormalizeTimeout = 8 * crl::time(1000);
 
-constexpr auto kMaxSessionsCount = 8;
+constexpr auto kMaxSessionsCount = 16;
 constexpr auto kFastRequestThreshold = 1 * crl::time(1000);
 constexpr auto kSlowRequestThreshold = 8 * crl::time(1000);
 

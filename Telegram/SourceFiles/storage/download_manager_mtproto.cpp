@@ -20,10 +20,11 @@ namespace Storage {
 namespace {
 
 constexpr auto kKillSessionTimeout = 15 * crl::time(1000);
-constexpr auto kStartWaitedInSession = 4 * kDownloadPartSize;
-constexpr auto kMaxWaitedInSession = 16 * kDownloadPartSize;
-constexpr auto kStartSessionsCount = 1;
-constexpr auto kMaxSessionsCount = 8;
+// SpecGram: Speed booster - increase parallel download sessions and pipe depth
+constexpr auto kStartWaitedInSession = 16 * kDownloadPartSize;
+constexpr auto kMaxWaitedInSession = 64 * kDownloadPartSize;
+constexpr auto kStartSessionsCount = 4;
+constexpr auto kMaxSessionsCount = 24;
 constexpr auto kMaxTrackedSessionRemoves = 64;
 constexpr auto kRetryAddSessionTimeout = 8 * crl::time(1000);
 constexpr auto kRetryAddSessionSuccesses = 3;
