@@ -18,6 +18,7 @@ jobs:
     runs-on: windows-latest
 
     env:
+      Platform: x64
       UPLOAD_ARTIFACT: "true"
       ONLY_CACHE: "false"
       PREPARE_PATH: "Telegram/build/prepare/prepare.py"
@@ -57,11 +58,12 @@ jobs:
           echo "$SDK" >> CACHE_KEY.txt
           echo "CACHE_KEY=$(sha256sum CACHE_KEY.txt | awk '{ print $1 }')" >> $GITHUB_ENV
 
-      - uses: ilammy/msvc-dev-cmd@v1
+      - uses: Eden-CI/msvc-dev-cmd@master
         name: Native Tools Command Prompt.
         with:
           arch: x64
           sdk: ${{ env.SDK }}
+          toolset: '14.44'
 
       - name: NuGet sources.
         run: |
@@ -100,7 +102,10 @@ jobs:
           restore-keys: ${{ runner.OS }}-x64-qt-
 
       - name: Libraries.
+        env:
+          Platform: x64
         run: |
+          set Platform=x64
           %TBUILD%\%REPO_NAME%\Telegram\build\prepare\win.bat skip-release silent
 
       - name: Free up some disk space.
@@ -108,7 +113,10 @@ jobs:
         run: find $LibrariesPath '(' '(' ! '(' -name '*.lib' -o -name '*.a' -o -name '*.exe' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -name '*.pc' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -path '*/nv-codec-headers/*' ')' -type f ')' -o -empty ')' -delete
 
       - name: Telegram Desktop build.
+        env:
+          Platform: x64
         run: |
+          set Platform=x64
           cd %TBUILD%\%REPO_NAME%\Telegram
 
           call configure.bat ^
