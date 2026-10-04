@@ -58,6 +58,10 @@ jobs:
           echo "$SDK" >> CACHE_KEY.txt
           echo "CACHE_KEY=$(sha256sum CACHE_KEY.txt | awk '{ print $1 }')" >> $GITHUB_ENV
 
+          echo "Configurate git for builds."
+          git config --global user.email "ci@local"
+          git config --global user.name "CI"
+
       - uses: Eden-CI/msvc-dev-cmd@master
         name: Native Tools Command Prompt.
         with:
@@ -69,6 +73,12 @@ jobs:
         run: |
           nuget sources Disable -Name "Microsoft Visual Studio Offline Packages"
           nuget sources Add -Source https://api.nuget.org/v3/index.json & exit 0
+
+      - name: Prepare MSYS2 Tools.
+        run: |
+          if exist C:\msys64 (
+            C:\msys64\usr\bin\pacman.exe -S --needed --noconfirm make mingw-w64-x86_64-diffutils mingw-w64-x86_64-gperf mingw-w64-x86_64-nasm mingw-w64-x86_64-perl mingw-w64-x86_64-pkgconf
+          )
 
       - name: ThirdParty cache.
         id: cache-third-party
@@ -106,7 +116,7 @@ jobs:
           Platform: x64
         run: |
           set Platform=x64
-          %TBUILD%\%REPO_NAME%\Telegram\build\prepare\win.bat skip-release silent
+          python %TBUILD%\%REPO_NAME%\Telegram\build\prepare\prepare.py skip-release silent
 
       - name: Free up some disk space.
         shell: bash
@@ -136,7 +146,9 @@ jobs:
         run: |
           set OUT=%TBUILD%\%REPO_NAME%\out\Debug
           mkdir artifact
-          if exist "%OUT%\AyuGram.exe" (
+          if exist "%OUT%\SpecGram.exe" (
+            copy /y "%OUT%\SpecGram.exe" "artifact\SpecGram.exe"
+          ) else if exist "%OUT%\AyuGram.exe" (
             copy /y "%OUT%\AyuGram.exe" "artifact\SpecGram.exe"
           ) else if exist "%OUT%\Telegram.exe" (
             copy /y "%OUT%\Telegram.exe" "artifact\SpecGram.exe"

@@ -21,8 +21,14 @@ def nativeToolsError():
 win = (sys.platform == 'win32')
 mac = (sys.platform == 'darwin')
 
-if win and not 'Platform' in os.environ:
-    nativeToolsError()
+if win:
+    p = os.environ.get('Platform', os.environ.get('PLATFORM', os.environ.get('VSCMD_ARG_TGT_ARCH', 'x64'))).strip().lower()
+    if 'arm' in p:
+        os.environ['Platform'] = 'arm64'
+    elif '86' in p or '32' in p:
+        os.environ['Platform'] = 'x86'
+    else:
+        os.environ['Platform'] = 'x64'
 
 win32 = win and (os.environ['Platform'] == 'x86')
 win64 = win and (os.environ['Platform'] == 'x64')
@@ -43,9 +49,6 @@ qt = os.environ.get('QT')
 if win and not 'COMSPEC' in os.environ:
     error('COMSPEC environment variable is not set.')
 
-if win and not win32 and not win64 and not winarm:
-    nativeToolsError()
-
 os.chdir(scriptPath + '/../../../..')
 
 pathSep = ';' if win else ':'
@@ -56,6 +59,7 @@ rootDir = os.getcwd()
 libsDir = os.path.realpath(os.path.join(rootDir, libsLoc))
 thirdPartyDir = os.path.realpath(os.path.join(rootDir, 'ThirdParty'))
 usedPrefix = os.path.realpath(os.path.join(libsDir, 'local'))
+msys64Dir = 'C:\\msys64' if (win and os.path.isdir('C:\\msys64\\usr\\bin')) else os.path.realpath(os.path.join(thirdPartyDir, 'msys64'))
 
 optionsList = [
     'qt6',
@@ -82,21 +86,23 @@ if not os.path.isdir(os.path.join(thirdPartyDir, keysLoc)):
     pathlib.Path(os.path.join(thirdPartyDir, keysLoc)).mkdir(parents=True, exist_ok=True)
 
 pathPrefixes = [
-    'ThirdParty\\msys64\\mingw64\\bin',
-    'ThirdParty\\jom',
-    'ThirdParty\\gyp',
+    os.path.join(msys64Dir, 'mingw64\\bin'),
+    os.path.join(thirdPartyDir, 'jom'),
+    os.path.join(thirdPartyDir, 'gyp'),
+    os.path.join(thirdPartyDir, 'python\\Scripts'),
 ] if win else [
     'ThirdParty/gyp',
 ]
 pathPrefix = ''
 for singlePrefix in pathPrefixes:
-    pathPrefix = pathPrefix + os.path.join(rootDir, singlePrefix) + pathSep
+    pathPrefix = singlePrefix + pathSep + pathPrefix
 
 environment = {
     'USED_PREFIX': usedPrefix,
     'ROOT_DIR': rootDir,
     'LIBS_DIR': libsDir,
     'THIRDPARTY_DIR': thirdPartyDir,
+    'MSYS64_DIR': msys64Dir,
     'PATH_PREFIX': pathPrefix,
     'CMAKE_GENERATOR': 'Ninja Multi-Config',
 }
@@ -130,6 +136,7 @@ ignoreInCacheForThirdParty = [
     'LIBS_DIR',
     'SPECIAL_TARGET',
     'X8664',
+    'MSYS64_DIR',
 ]
 
 environmentKeyString = ''
@@ -315,7 +322,10 @@ def run(commands):
         with open("command.bat", 'w') as file:
             file.write('@echo OFF\r\nset "NoDefaultCurrentDirectoryInExePath="\r\n' + winFailOnEach(commands))
         batPath = os.path.abspath("command.bat")
-        result = subprocess.run(batPath, shell=True, env=modifiedEnv).returncode == 0
+        proc = subprocess.run(batPath, shell=True, env=modifiedEnv)
+        result = proc.returncode == 0
+        if not result:
+            print(f"\n[STAGE COMMAND FAILED with exit code {proc.returncode}] in {os.getcwd()}\n")
         if result and os.path.exists("command.bat"):
             os.remove("command.bat")
         return result
@@ -462,18 +472,36 @@ mac:
     git checkout 4aae812a405f47553e001faf566de572d3eccd16
 """)
 
-stage('msys64', """
+if win and os.path.isdir('C:\\msys64\\usr\\bin'):
+    stage('msys64', """
 win:
-    SET PATH=%THIRDPARTY_DIR%\\msys64\\usr\\bin;%PATH%
+    SET PATH=%MSYS64_DIR%\\usr\\bin;%PATH%
+    SET CHERE_INVOKING=enabled_from_arguments
+    SET MSYS2_PATH_TYPE=inherit
+
+    if not exist msys64 mkdir msys64
+
+    pacman -S --needed --noconfirm ^
+        make ^
+        mingw-w64-x86_64-diffutils ^
+        mingw-w64-x86_64-gperf ^
+        mingw-w64-x86_64-nasm ^
+        mingw-w64-x86_64-perl ^
+        mingw-w64-x86_64-pkgconf
+""", 'ThirdParty')
+else:
+    stage('msys64', """
+win:
+    SET PATH=%MSYS64_DIR%\\usr\\bin;%PATH%
     SET CHERE_INVOKING=enabled_from_arguments
     SET MSYS2_PATH_TYPE=inherit
 
     powershell -Command "iwr -OutFile ./msys64.exe https://github.com/msys2/msys2-installer/releases/download/2025-08-30/msys2-base-x86_64-20250830.sfx.exe"
-    msys64.exe
+    msys64.exe -y
     del msys64.exe
 
-    bash -c "pacman-key --init; pacman-key --populate; pacman -Syu --noconfirm"
-    pacman -Syu --noconfirm ^
+    bash -c "pacman-key --init; pacman-key --populate"
+    pacman -S --needed --noconfirm ^
         make ^
         mingw-w64-x86_64-diffutils ^
         mingw-w64-x86_64-gperf ^
@@ -969,10 +997,10 @@ stage('libheif', """
     git clone -b v1.23.1 https://github.com/strukturag/libheif.git
     cd libheif
 win:
-    %THIRDPARTY_DIR%\\msys64\\usr\\bin\\sed.exe -i 's/LIBHEIF_EXPORTS/LIBDE265_STATIC_BUILD/g' libheif/CMakeLists.txt
-    %THIRDPARTY_DIR%\\msys64\\usr\\bin\\sed.exe -i 's/HAVE_VISIBILITY/LIBHEIF_STATIC_BUILD/g' libheif/CMakeLists.txt
-    %THIRDPARTY_DIR%\\msys64\\usr\\bin\\sed.exe -i 's/LIBHEIF_EXPORTS/LIBDE265_STATIC_BUILD/g' heifio/CMakeLists.txt
-    %THIRDPARTY_DIR%\\msys64\\usr\\bin\\sed.exe -i 's/HAVE_VISIBILITY/LIBHEIF_STATIC_BUILD/g' heifio/CMakeLists.txt
+    %MSYS64_DIR%\\usr\\bin\\sed.exe -i 's/LIBHEIF_EXPORTS/LIBDE265_STATIC_BUILD/g' libheif/CMakeLists.txt
+    %MSYS64_DIR%\\usr\\bin\\sed.exe -i 's/HAVE_VISIBILITY/LIBHEIF_STATIC_BUILD/g' libheif/CMakeLists.txt
+    %MSYS64_DIR%\\usr\\bin\\sed.exe -i 's/LIBHEIF_EXPORTS/LIBDE265_STATIC_BUILD/g' heifio/CMakeLists.txt
+    %MSYS64_DIR%\\usr\\bin\\sed.exe -i 's/HAVE_VISIBILITY/LIBHEIF_STATIC_BUILD/g' heifio/CMakeLists.txt
     cmake . ^
         -DCMAKE_INSTALL_PREFIX=%LIBS_DIR%/local ^
         -DCMAKE_MSVC_RUNTIME_LIBRARY="MultiThreaded$<$<CONFIG:Debug>:Debug>" ^
@@ -1076,7 +1104,7 @@ depends:patches/libvpx/*.patch
 win:
     for /r %%i in (..\\patches\\libvpx\\*) do git apply %%i
 
-    SET PATH=%THIRDPARTY_DIR%\\msys64\\usr\\bin;%PATH%
+    SET PATH=%MSYS64_DIR%\\usr\\bin;%PATH%
     SET CHERE_INVOKING=enabled_from_arguments
     SET MSYS2_PATH_TYPE=inherit
 
@@ -1180,7 +1208,7 @@ win:
 depends:patches/ffmpeg.patch
     git apply ../patches/ffmpeg.patch
 
-    SET PATH=%THIRDPARTY_DIR%\\msys64\\usr\\bin;%PATH%
+    SET PATH=%MSYS64_DIR%\\usr\\bin;%PATH%
     SET CHERE_INVOKING=enabled_from_arguments
     SET MSYS2_PATH_TYPE=inherit
 
@@ -1855,7 +1883,7 @@ win:
     SET OPENSSL_DIR=%LIBS_DIR%\\openssl3
     SET OPENSSL_LIBS_DIR=%OPENSSL_DIR%\\out
     SET ZLIB_LIBS_DIR=%LIBS_DIR%\\zlib
-    %THIRDPARTY_DIR%\\msys64\\usr\\bin\\sed -i "s/STREQUAL/MATCHES/" td/generate/CMakeLists.txt
+    %MSYS64_DIR%\\usr\\bin\\sed -i "s/STREQUAL/MATCHES/" td/generate/CMakeLists.txt
     mkdir out
     cd out
     mkdir Debug
